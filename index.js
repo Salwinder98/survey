@@ -1,68 +1,40 @@
+const http = require('http');
+const httpProxy = require('http-proxy');
+const express = require("express");
+let app = express();
+const session =  require('express-session');
 
-Survey
-    .StylesManager
-    .applyTheme("default");
+app.use(session({ secret: 'Secret5555', resave: false, saveUninitialized: true, }));
+// Define the port to run on
+app.set('port', process.env.PORT || parseInt(process.argv.pop()) || 8081);
+let apiProxy = httpProxy.createProxy({
+    changeOrigin: true
+});
 
-var json = {
-    title: "American History",
-    pages: [
-        {
-            questions: [
-                {
-                    type: "radiogroup",
-                    name: "civilwar",
-                    title: "When was the Civil War?",
-                    choices: [
-                        "1750-1800", "1800-1850", "1850-1900", "1900-1950", "after 1950"
-                    ],
-                    correctAnswer: "1850-1900"
+app.use("/test1", express.static(__dirname + "/test1"));
+app.use("/test2", express.static(__dirname + "/test2"));
 
-                    
 
-                }
-            ]
-        }, {
-            questions: [
-                {
-                    type: "radiogroup",
-                    name: "libertyordeath",
-                    title: "Who said 'Give me liberty or give me death?'",
-                    choicesOrder: "random",
-                    choices: [
-                        "John Hancock", "James Madison", "Patrick Henry", "Samuel Adams"
-                    ],
-                    correctAnswer: "Patrick Henry"
-                }
-                
-                
+let aUrls = [
+    "/test1/",
+    "/test2/"
+];
 
-            ]
-        }, {
-            
-            questions: [
-                {
-                    type: "radiogroup",
-                    name: "magnacarta",
-                    title: "What is the Magna Carta?",
-                    choicesOrder: "random",
-                    choices: [
-                        "The foundation of the British parliamentary system", "The Great Seal of the monarchs of England", "The French Declaration of the Rights of Man", "The charter signed by the Pilgrims on the Mayflower"
-                    ],
-                    correctAnswer: "The foundation of the British parliamentary system"
-                }
-            ]
-        }
-    ],
-    completedHtml: "<h4>You have answered correctly <b>{correctedAnswers}</b> questions from <b>{questionCount}</b>.</h4>"
-};
-
-window.survey = new Survey.Model(json);
-
-survey
-    .onComplete
-    .add(function (result) {
-        document
-            .location = "indexthanks.html";
+app.all("/*", function(req, res) {
+    let nServer = req.session.nServer;
+    if(!nServer || nServer < 1 || nServer > aUrls.length){
+        nServer = Math.ceil(Math.random() *aUrls.length);
+        req.session.nServer =  nServer;
+    }
+    let sProxyUrl =  (req.headers["x-forwarded-proto"] || "http") + "://" + req.get('host') + aUrls[nServer - 1];
+    apiProxy.web(req, res, {target:sProxyUrl}, (e)=>{
+        console.log(e.toString())
     });
+});
 
-$("#surveyElement").Survey({ model: survey });
+// Create http server that leverages reverse proxy instance
+// and proxy rules to proxy requests to different targets
+http.createServer(app)
+.listen(app.get('port'), function () {
+  console.log('Example app listening on port ' + app.get('port') + "! Go to http://localhost:" + app.get('port') + "/")
+});
